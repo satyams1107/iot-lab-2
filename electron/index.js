@@ -1,79 +1,94 @@
 document.onkeydown = updateKey;
 document.onkeyup = resetKey;
 
-var server_port = 65432;
-var server_addr = "192.168.3.49";   // the IP address of your Raspberry PI
+const net = require('net');
 
-function client(){
-    
-    const net = require('net');
-    var input = document.getElementById("message").value;
+const server_port = 65432;
+const server_addr = "192.168.1.55";   // IP address of your Raspberry Pi
+let client = null;                    // persistent client connection
 
-    const client = net.createConnection({ port: server_port, host: server_addr }, () => {
-        // 'connect' listener.
-        console.log('connected to server!');
-        // send the message
-        client.write(`${input}\r\n`);
+// Connect to server once
+function connectToServer() {
+    client = net.createConnection({ port: server_port, host: server_addr }, () => {
+        console.log('Connected to Raspberry Pi server!');
+        document.getElementById("bluetooth").innerHTML = "Connected to Pi";
     });
-    
-    // get the data from the server
+
     client.on('data', (data) => {
-        document.getElementById("bluetooth").innerHTML = data;
-        console.log(data.toString());
-        client.end();
-        client.destroy();
+        const msg = data.toString().trim();
+        console.log('From Pi:', msg);
+        document.getElementById("bluetooth").innerHTML = msg;
     });
 
     client.on('end', () => {
-        console.log('disconnected from server');
+        console.log('Disconnected from server');
+        document.getElementById("bluetooth").innerHTML = "Disconnected";
+        client = null;
     });
 
-
+    client.on('error', (err) => {
+        console.error('Connection error:', err.message);
+        document.getElementById("bluetooth").innerHTML = "Error: " + err.message;
+        client = null;
+    });
 }
 
-// for detecting which key is been pressed w,a,s,d
-function updateKey(e) {
+// General-purpose function to send data to the server
+function to_server(message) {
+    if (client && !client.destroyed) {
+        client.write(`${message}\r\n`);
+        console.log("Sent:", message);
+    } else {
+        console.warn("Not connected...reconnecting...");
+        connectToServer();
+        // small delay to ensure connection is re-established
+        setTimeout(() => {
+            if (client && !client.destroyed) {
+                client.write(`${message}\r\n`);
+            }
+        }, 500);
+    }
+}
 
+// Handle key press for WASD movement
+function updateKey(e) {
     e = e || window.event;
 
     if (e.keyCode == '87') {
-        // up (w)
         document.getElementById("upArrow").style.color = "green";
-        send_data("87");
+        to_server("up");
     }
     else if (e.keyCode == '83') {
-        // down (s)
         document.getElementById("downArrow").style.color = "green";
-        send_data("83");
+        to_server("down");
     }
     else if (e.keyCode == '65') {
-        // left (a)
         document.getElementById("leftArrow").style.color = "green";
-        send_data("65");
+        to_server("left");
     }
     else if (e.keyCode == '68') {
-        // right (d)
         document.getElementById("rightArrow").style.color = "green";
-        send_data("68");
+        to_server("right");
     }
 }
 
-// reset the key to the start state 
+// Reset the key color to default when released
 function resetKey(e) {
-
     e = e || window.event;
-
     document.getElementById("upArrow").style.color = "grey";
     document.getElementById("downArrow").style.color = "grey";
     document.getElementById("leftArrow").style.color = "grey";
     document.getElementById("rightArrow").style.color = "grey";
 }
 
-
-// update data for every 50ms
-function update_data(){
-    setInterval(function(){
-        // get image from python server
-        client();
+// Send periodic updates every 50 ms (optional)
+function update_data() {
+    setInterval(function () {
+        if (client && !client.destroyed) {
+            client.write("ping\r\n");
+        }
     }, 50);
 }
+
+// Connect when the app loads
+connectToServer();
