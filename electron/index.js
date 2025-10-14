@@ -4,44 +4,70 @@ document.onkeyup = resetKey;
 const net = require('net');
 
 const server_port = 65432;
-const server_addr = "192.168.1.55";   // IP address of your Raspberry Pi
-let client = null;                    // persistent client connection
+const server_addr = "192.168.1.55";
+let client = null;
 
-// Connect to server once
 function connectToServer() {
     client = net.createConnection({ port: server_port, host: server_addr }, () => {
         console.log('Connected to Raspberry Pi server!');
-        document.getElementById("bluetooth").innerHTML = "Connected to Pi";
+        document.getElementById("reply").innerHTML = "Connected to Pi";
     });
 
     client.on('data', (data) => {
         const msg = data.toString().trim();
-        console.log('From Pi:', msg);
-        document.getElementById("bluetooth").innerHTML = msg;
+        console.log('From Pi: ', msg);
+
+        const tempMatch = msg.match(/TEMP:([\d.]+)C/);
+        const ultrasonicMatch = msg.match(/ULTRASONIC:([\d.]+)cm/);
+        const distMatch = msg.match(/DISTANCE:([\d.]+)ft/);
+
+        console.log('TEMP', tempMatch);
+        console.log('ULTRASONIC', ultrasonicMatch);
+        console.log('DISTANCE', distMatch);
+
+        if (tempMatch) {
+            const temp = parseFloat(tempMatch[1]);
+            document.getElementById("temperature").innerText = temp.toFixed(2);
+        }
+
+        if (ultrasonicMatch) {
+            // FIX: Use ultrasonicMatch instead of distMatch!
+            const dist = parseFloat(ultrasonicMatch[1]);
+            document.getElementById("ultrasonic").innerText = dist.toFixed(2);
+        }
+
+        if (distMatch) {
+            const dist = parseFloat(distMatch[1]);
+            document.getElementById("distance").innerText = dist.toFixed(2);
+        }
+
+        // Handle command acknowledgements
+        if (msg.startsWith("OK:")) {
+            const direction = msg.split(":")[1];
+            document.getElementById("direction").innerText = direction;
+        }
     });
 
     client.on('end', () => {
         console.log('Disconnected from server');
-        document.getElementById("bluetooth").innerHTML = "Disconnected";
+        document.getElementById("reply").innerHTML = "Disconnected";
         client = null;
     });
 
     client.on('error', (err) => {
         console.error('Connection error:', err.message);
-        document.getElementById("bluetooth").innerHTML = "Error: " + err.message;
+        document.getElementById("reply").innerHTML = "Error: " + err.message;
         client = null;
     });
 }
 
-// General-purpose function to send data to the server
 function to_server(message) {
     if (client && !client.destroyed) {
         client.write(`${message}\r\n`);
         console.log("Sent:", message);
     } else {
-        console.warn("Not connected...reconnecting...");
+        console.warn("Not connected... reconnecting...");
         connectToServer();
-        // small delay to ensure connection is re-established
         setTimeout(() => {
             if (client && !client.destroyed) {
                 client.write(`${message}\r\n`);
@@ -50,45 +76,40 @@ function to_server(message) {
     }
 }
 
-// Handle key press for WASD movement
 function updateKey(e) {
     e = e || window.event;
+    const key = e.keyCode;
 
-    if (e.keyCode == '87') {
+    if (key === 87) {
         document.getElementById("upArrow").style.color = "green";
         to_server("up");
-    }
-    else if (e.keyCode == '83') {
+    } else if (key === 83) {
         document.getElementById("downArrow").style.color = "green";
         to_server("down");
-    }
-    else if (e.keyCode == '65') {
+    } else if (key === 65) {
         document.getElementById("leftArrow").style.color = "green";
         to_server("left");
-    }
-    else if (e.keyCode == '68') {
+    } else if (key === 68) {
         document.getElementById("rightArrow").style.color = "green";
         to_server("right");
     }
 }
 
-// Reset the key color to default when released
 function resetKey(e) {
-    e = e || window.event;
     document.getElementById("upArrow").style.color = "grey";
     document.getElementById("downArrow").style.color = "grey";
     document.getElementById("leftArrow").style.color = "grey";
     document.getElementById("rightArrow").style.color = "grey";
 }
 
-// Send periodic updates every 50 ms (optional)
-function update_data() {
-    setInterval(function () {
-        if (client && !client.destroyed) {
-            client.write("ping\r\n");
-        }
-    }, 50);
+// update data for every 50ms
+function update_data(){
+    setInterval(function(){
+        // get image from python server
+        to_server("update");
+    }, 1000);
 }
 
-// Connect when the app loads
+// Connect to the Pi on startup
 connectToServer();
+update_data();
