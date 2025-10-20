@@ -31,7 +31,6 @@ function connectToServer() {
         }
 
         if (ultrasonicMatch) {
-            // FIX: Use ultrasonicMatch instead of distMatch!
             const dist = parseFloat(ultrasonicMatch[1]);
             document.getElementById("ultrasonic").innerText = dist.toFixed(2);
         }
